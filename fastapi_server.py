@@ -1,11 +1,26 @@
 from fastapi import FastAPI, WebSocket
+from fastapi import FastAPI, File, UploadFile, Request
+from fastapi.templating import Jinja2Templates
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from track_3 import track_data, country_balls_amount
 import asyncio
 import glob
+import numpy as np
+#from trackers.strong.deep_sort import nn_matching
+#from trackers.strong.deep_sort.detection import Detection
+#from trackers.strong.deep_sort.tracker import Tracker as DeepSort
+from trackers.strong.deep_sort import build_tracker
+from utils.parser import get_config
+from sklearn.metrics.pairwise import cosine_distances
 
 app = FastAPI(title='Tracker assignment')
-imgs = glob.glob('imgs/*')
+templates = Jinja2Templates(directory="templates")
+app.mount("/static", StaticFiles(directory="static"), name="static")
+imgs = glob.glob('./static/imgs/*')
 country_balls = [{'cb_id': x, 'img': imgs[x % len(imgs)]} for x in range(country_balls_amount)]
+cfg = get_config(config_file="./configs/deep_sort.yaml")
+deepsort = build_tracker(cfg, use_cuda=False)
 print('Started')
 
 
@@ -48,7 +63,18 @@ def tracker_strong(el):
     и по координатам вырезать необходимые регионы.
     TODO: Ужасный костыль, на следующий поток поправить
     """
+    '''
+    detections = [x for x in el['data'] if len(x['bounding_box']) > 0]
+    dets = [Detection(np.array(x['bounding_box']), 1.0, (1,2,3)) for x in detections]
+    '''
+    el['data'] = deepsort.update(el['data'], el['frame_id'])
     return el
+
+
+@app.get("/", response_class=HTMLResponse)
+async def main(request: Request):
+    context = {'request': request}
+    return templates.TemplateResponse('index.html', context)
 
 
 @app.websocket("/ws")
@@ -61,9 +87,9 @@ async def websocket_endpoint(websocket: WebSocket):
     for el in track_data:
         await asyncio.sleep(0.5)
         # TODO: part 1
-        el = tracker_soft(el)
+        #el = tracker_soft(el)
         # TODO: part 2
-        # el = tracker_strong(el)
+        el = tracker_strong(el)
         # отправка информации по фрейму
         await websocket.send_json(el)
     print('Bye..')
