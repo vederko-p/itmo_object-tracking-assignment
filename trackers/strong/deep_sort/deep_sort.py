@@ -22,8 +22,10 @@ class DeepSort(object):
         metric = NearestNeighborDistanceMetric("cosine", max_cosine_distance, nn_budget)
         self.tracker = Tracker(metric, max_iou_distance=max_iou_distance, max_age=max_age, n_init=n_init)
 
-    def update(self, el_data:dict, frame_id:int):
-        bbox_xywh = [x['bounding_box'] for x in el_data if len(x['bounding_box']) > 0]
+    def update(self, el_data:list, frame_id:int):
+        el_data = [x for x in el_data if len(x['bounding_box']) > 0]
+        cb_id = [x['cb_id'] for x in el_data]
+        bbox_xywh = [x['bounding_box'] for x in el_data]
         confidences = [1.0 for x in bbox_xywh]
         ori_img = cv2.imread(f'./frames/{frame_id}.png')
         self.height, self.width = ori_img.shape[:2]
@@ -31,8 +33,7 @@ class DeepSort(object):
         bbox_xywh = np.array([np.array(self._xyxy_to_xywh(x)) for x in bbox_xywh])
         features = self._get_features(bbox_xywh, ori_img)
         bbox_tlwh = self._xywh_to_tlwh(bbox_xywh)
-        detections = [Detection(bbox_tlwh[i], conf, features[i]) for i,conf in enumerate(confidences) if conf>self.min_confidence]
-
+        detections = [Detection(bbox_tlwh[i], conf, features[i], cbid = cb_id[i]) for i,conf in enumerate(confidences) if conf>self.min_confidence]
         # run on non-maximum supression
         boxes = np.array([d.tlwh for d in detections])
         scores = np.array([d.confidence for d in detections])
@@ -52,7 +53,7 @@ class DeepSort(object):
             box = track.to_tlwh()
             dic['bounding_box'] = self._tlwh_to_xyxy(box)
             dic['track_id'] = track.track_id
-            dic['cb_id'] = x
+            dic['cb_id'] = track.cb_id
             dic['x'] = int(np.mean([dic['bounding_box'][0], dic['bounding_box'][2]]))
             dic['y'] = int(np.mean([dic['bounding_box'][1], dic['bounding_box'][3]]))
 
