@@ -42,7 +42,7 @@ def collect_st_tracks(predicted_tracks) -> dict:
             all_st_tracks[st_data['track_id']].append(
                 {'frame_id': frame['frame_id'], 'bb': st_data['bounding_box']}
             )
-    return all_st_tracks
+    return {k: v for k, v in all_st_tracks.items() if k is not None}
 
 
 def calc_iou(bb1: list, bb2: list) -> float:
@@ -66,8 +66,8 @@ def calc_iou(bb1: list, bb2: list) -> float:
 def calculate_iou_matrix(gt_tracks: dict, st_tracks: dict) -> np.array:
     """Return matrix of (n,m) size, where n=|gt_tracks| and m=|st_tracks|."""
     s = len(gt_tracks), len(st_tracks)
-    iou_matrix = np.zeros(s)  # mean spatial interception
-    time_matrix = np.zeros(s)  # mean temporal interception
+    iou_matrix = np.zeros(s)  # spatial interception
+    time_matrix = np.zeros(s)  # temporal interception
     for gt_index, (gt_id, gt_metadata) in enumerate(gt_tracks.items()):
         for st_index, (st_id, st_metadata) in enumerate(st_tracks.items()):
             # collect frames:
@@ -99,8 +99,8 @@ def main_metrics(
             (iou_matrix > iou_threshold) & (time_matrix > time_threshold)
     ).any(axis=1).astype(int).mean()
     return (
-        round(iou_matrix.mean(), 3),
-        round(time_matrix.mean(), 3),
+        round(iou_matrix.max(axis=1).mean(), 3),
+        round(time_matrix.max(axis=1).mean(), 3),
         round(true_positive, 3)
     )
 
@@ -111,12 +111,8 @@ if __name__ == '__main__':
     st_tracks = collect_st_tracks(
         read_tracks_file('st_tracks/tracks_strong.yaml')
     )
-    '''for k, v in st_tracks.items():
-        print(f'{k}: {len(v)}')'''
 
     iou_m, time_m = calculate_iou_matrix(gt_tracks, st_tracks)
-    # print(iou_m)
-    # print(time_m)
 
     metrics = main_metrics(iou_m, time_m)
     print(f'mean IoU: {metrics[0]}')
